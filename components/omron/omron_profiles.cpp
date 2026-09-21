@@ -1324,7 +1324,12 @@ static constexpr OmronProfile PROFILE_CATALOG[] = {
         .cursor_byte_order = CursorByteOrder::SAME_AS_RECORD,
         .record_format = RecordFormat::CLASSIC_VITAL_14,
         .record_size = 0x10,
-        .transmission_block_size = 0x10,
+        // 64 - 6 - 2, as the field's declaration describes. Was 0x10, the
+        // value that "circulates for several of these families with no source
+        // behind it": on an X7 Smart it pairs and programs the key, then every
+        // read answers for an address the transaction is not waiting on and the
+        // poll dies on "Memory-protocol reply timed out after all retries".
+        .transmission_block_size = 0x38,
         .settings_read_address = 0x0010,
         .settings_write_address = 0x0054,
         .settings_index_region_size = 0x10,
