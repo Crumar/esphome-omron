@@ -1270,6 +1270,18 @@ static void test_profiles_and_aliases() {
   assert(profile_for_model("") == nullptr);
   assert(profile_for_model("not-an-omron") == nullptr);
   assert(profile_for_model("HEM-7155T_ESL")->id == OmronProfileId::HEM_7155T);
+
+  // Every regional HEM-7361T resolves to its own profile, not to HEM-7342T.
+  // These were filed under the 7342T aliases, so an X7 Smart (HEM-7361T_ESL),
+  // an M7 Intelli IT (HEM-7361T-EBK) and an M500 Intelli IT (HEM-7361T-D) all
+  // came back as HEM-7342T -- a profile with a different
+  // transmission_block_size and record_sequence_offset.
+  for (const char *model : {"HEM-7361T", "HEM-7361T-ALRU", "HEM-7361T-AP", "HEM-7361T-D", "HEM-7361T-E",
+                            "HEM-7361T-EBK", "HEM-7361T_ESL"})
+    assert(profile_for_model(model)->id == OmronProfileId::HEM_7361T);
+  // The T1 suffix marks a distinct family elsewhere in this table, so this one
+  // is deliberately left where it was.
+  assert(profile_for_model("HEM-7361T1-BS")->id == OmronProfileId::HEM_7342T);
   assert(profile_for_model("HEM-7155T_ESL1")->id == OmronProfileId::HEM_7155T_MW3);
   assert(profile_for_model("HEM-7155T_K4-ESL")->id == OmronProfileId::HEM_7155T_K4);
 }

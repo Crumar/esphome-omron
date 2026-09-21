@@ -115,8 +115,14 @@ static const char *const HEM_7188T1_ALIASES[] = {
     "HEM-7188T1",
 };
 
+// The regional variants of the HEM-7361T. These were filed under
+// HEM_7342T_ALIASES, which meant every X7 Smart / M7 Intelli IT / M500
+// Intelli IT resolved to the HEM-7342T profile instead of its own. The two
+// profiles differ in transmission_block_size (0x10 vs 0x38) and
+// record_sequence_offset, so the misfiling is not cosmetic.
 static const char *const HEM_7361T_ALIASES[] = {
-    "HEM-7361T",
+    "HEM-7361T",      "HEM-7361T-ALRU", "HEM-7361T-AP", "HEM-7361T-D",
+    "HEM-7361T-E",    "HEM-7361T-EBK",  "HEM-7361T_ESL",
 };
 
 static const char *const HEM_7380T1_ALIASES[] = {
@@ -251,10 +257,13 @@ static const char *const HEM_7322T_ALIASES[] = {
 
 static const char *const HEM_7342T_ALIASES[] = {
     "HEM-7159T_AP3",  "HEM-7342T-CA",     "HEM-7342T-Z",      "HEM-7342T1-ACACD6", "HEM-7342T1-ACDC6", "HEM-7343T",
-    "HEM-7343T-Z",    "HEM-7361T-E",      "HEM-7344JT_ASH3",  "HEM-7344T_ASH3BK",  "HEM-7344T_ASH3SL", "HEM-7346T-AJC3",
-    "HEM-7346T-AJE3", "HEM-7346T2-AJC32", "HEM-7346T2-AJE32", "HEM-7346T_ABR3",    "HEM-7346T_AP3",    "HEM-7347T-AJC3",
-    "HEM-7347T-AJE3", "HEM-7347T2-AJC32", "HEM-7347T2-AJE32", "HEM-7349T_ABR",     "HEM-7361T-ALRU",   "HEM-7361T-AP",
-    "HEM-7361T-D",    "HEM-7361T-EBK",    "HEM-7361T1-BS",    "HEM-7361T_ESL",
+    "HEM-7343T-Z",    "HEM-7344JT_ASH3",  "HEM-7344T_ASH3BK", "HEM-7344T_ASH3SL",  "HEM-7346T-AJC3",   "HEM-7346T-AJE3",
+    "HEM-7346T2-AJC32", "HEM-7346T2-AJE32", "HEM-7346T_ABR3", "HEM-7346T_AP3",     "HEM-7347T-AJC3",   "HEM-7347T-AJE3",
+    "HEM-7347T2-AJC32", "HEM-7347T2-AJE32", "HEM-7349T_ABR",
+    // HEM-7361T1-BS stays here: the T1 suffix marks a distinct family
+    // elsewhere in this table, so it is not assumed to follow the plain
+    // HEM-7361T variants below.
+    "HEM-7361T1-BS",
 };
 
 static const char *const HEM_7530T_ALIASES[] = {
