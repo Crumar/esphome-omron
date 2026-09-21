@@ -1,5 +1,6 @@
 import datetime
 
+from esphome import automation
 import esphome.codegen as cg
 import esphome.config_validation as cv
 import esphome.final_validate as fv
@@ -18,6 +19,7 @@ from esphome.const import (
     CONF_NAME,
     CONF_PLATFORM,
     CONF_TIME_ID,
+    CONF_TRIGGER_ID,
     CONF_YEAR,
 )
 from esphome.core import CORE
@@ -77,6 +79,13 @@ SCOPE_HUB = "hub"
 
 omron_ns = cg.esphome_ns.namespace("omron")
 OmronBLEClient = omron_ns.class_("OmronBLEClient", esp32_ble_client.BLEClientBase)
+OmronMeasurement = omron_ns.struct("OmronMeasurement")
+OmronMeasurementConstRef = OmronMeasurement.operator("ref").operator("const")
+OmronMeasurementTrigger = omron_ns.class_(
+    "OmronMeasurementTrigger", automation.Trigger.template(cg.uint8, OmronMeasurementConstRef)
+)
+
+CONF_ON_MEASUREMENT = "on_measurement"
 OmronProfileId = omron_ns.enum("OmronProfileId", is_class=True)
 
 # Every profile that can be named here. `auto` is the other way in, and it is
@@ -361,6 +370,16 @@ CONFIG_SCHEMA = cv.All(
             # entities only - the newest reading per person and no events at
             # all, which is all the entities can show anyway.
             cv.Optional(CONF_HISTORY_RECORDS): cv.int_range(min=0, max=100),
+            # Fires once per harvested record, oldest first, draining the same
+            # history queue the Home Assistant events use. This is the only
+            # per-record sink on a node with no API connection.
+            cv.Optional(CONF_ON_MEASUREMENT): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        OmronMeasurementTrigger
+                    ),
+                }
+            ),
             # Drops records stamped before this date entirely - no entity, no
             # event, no watermark. A cuff whose clock has never been set stamps
             # every reading with one default date, so those measurements are
@@ -704,6 +723,14 @@ async def to_code(config):
         cg.add(var.set_profile(config[CONF_PROFILE]))
     if CONF_BINDKEY in config:
         cg.add(var.set_bind_key(config[CONF_BINDKEY]))
+    for conf in config.get(CONF_ON_MEASUREMENT, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID])
+        cg.add(var.add_measurement_trigger(trigger))
+        await automation.build_automation(
+            trigger,
+            [(cg.uint8, "user"), (OmronMeasurementConstRef, "measurement")],
+            conf,
+        )
     if CONF_TIME_ID in config:
         cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))
     # Left alone when unset: the component already defaults to the whole ring.

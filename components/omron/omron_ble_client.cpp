@@ -1732,6 +1732,10 @@ void OmronBLEClient::history_emit(const HistoryEvent &pending) {
   data["consecutive_measurement"] = to_string(static_cast<unsigned>(measurement.consecutive_measurement));
   this->fire_homeassistant_event("esphome.omron_measurement", data);
 #endif
+  // Fired whether or not the API is compiled in: this is the only per-record
+  // sink available to a node that runs without Home Assistant.
+  for (OmronMeasurementTrigger *trigger : this->measurement_triggers_)
+    trigger->publish(static_cast<uint8_t>(pending.user_index + 1), measurement);
   this->enable_loop();
 }
 

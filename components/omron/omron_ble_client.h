@@ -17,6 +17,7 @@
 #include "esphome/components/time/real_time_clock.h"
 #endif
 
+#include "omron_automation.h"
 #include "omron_advertisement.h"
 #include "omron_bond_cleanup.h"
 #include "omron_command_writer.h"
@@ -277,6 +278,9 @@ class OmronBLEClient final : public esp32_ble_client::BLEClientBase,
   uint32_t history_now_ms() override;
   void history_emit(const HistoryEvent &pending) override;
   void history_save_watermark(uint8_t user_index, int64_t epoch) override;
+
+  // Automation triggers fired once per harvested record; see omron_automation.h.
+  void add_measurement_trigger(OmronMeasurementTrigger *trigger) { this->measurement_triggers_.push_back(trigger); }
   uint32_t history_pref_hash_(uint8_t user_index) const;
   void publish_selected_measurement_(uint8_t user_index, const HarvestedRecord &selected);
   void publish_standard_measurement_(std::span<const uint8_t> data);
@@ -431,6 +435,7 @@ class OmronBLEClient final : public esp32_ble_client::BLEClientBase,
   // Unset in yaml means the whole written ring. An explicit 0 still means
   // "newest only, no events".
   uint8_t history_records_{HISTORY_RECORDS_ALL};
+  std::vector<OmronMeasurementTrigger *> measurement_triggers_;
   bool ignore_before_set_{false};
   int64_t ignore_before_epoch_{0};
   bool end_session_{true};
