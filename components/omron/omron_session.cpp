@@ -68,7 +68,22 @@ void OmronSession::fail_(const char *reason, int code) {
 void OmronSession::note_unexpected_reply_(const char *what) {
   if (this->diagnostics_ != nullptr)
     this->diagnostics_->unexpected_replies++;
-  OMRON_LOG_W(TAG, "[%s] Ignored: %s", this->host_ != nullptr ? this->host_->session_address() : "?", what);
+  const char *address = this->host_ != nullptr ? this->host_->session_address() : "?";
+  // "Ignored" on its own does not separate a late duplicate of a block already
+  // consumed from a cuff answering an address that was never asked for. The
+  // first is harmless; the second means the read plan and the cuff's memory map
+  // disagree, and only the numbers tell them apart.
+  const OmronTransaction::StrayFrameInfo &stray = this->transaction_.last_stray_frame();
+  if (!stray.valid) {
+    OMRON_LOG_W(TAG, "[%s] Ignored: %s", address, what);
+  } else if (stray.parse_failed) {
+    OMRON_LOG_W(TAG, "[%s] Ignored: %s (frame did not parse)", address, what);
+  } else {
+    OMRON_LOG_W(TAG, "[%s] Ignored: %s (waiting on 0x%04X, frame carried 0x%04X, type 0x%04X)", address, what,
+                static_cast<unsigned>(stray.expected_address), static_cast<unsigned>(stray.actual_address),
+                static_cast<unsigned>(stray.actual_type));
+  }
+  this->transaction_.clear_last_stray_frame();
 }
 
 void OmronSession::finish(bool success) {

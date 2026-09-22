@@ -497,9 +497,34 @@ static void test_transaction_engine() {
   assert(!wrong_address.finished());
   // Still on the same block: nothing was consumed.
   assert(wrong_address.received_blocks().empty());
+  // Both addresses are kept so the log can name them. A dropped frame that
+  // reports only "ignored" does not distinguish a late duplicate from a cuff
+  // answering an address the plan never asked for, and those want different
+  // fixes.
+  {
+    const auto &stray = wrong_address.last_stray_frame();
+    assert(stray.valid);
+    assert(!stray.parse_failed);
+    assert(stray.expected_address == 0x0400);
+    assert(stray.actual_address == 0x0401);
+    assert(stray.actual_type == static_cast<uint16_t>(PacketType::READ_RESPONSE));
+  }
   const auto right_address_reply = make_response(PacketType::READ_RESPONSE, 0x0400, {1, 2});
   assert(wrong_address.accept_frame(right_address_reply) == ProtocolError::NONE);
   assert(wrong_address.received_blocks().size() == 1);
+  // A frame that does not parse is flagged as such rather than reported with
+  // two meaningless addresses.
+  {
+    OmronTransaction unparseable;
+    assert(unparseable.add_read_range(0x0400, 2, 2));
+    assert(unparseable.begin(TransactionUnlock::NONE, OmronBindKey{}, zero_nonce));
+    assert(unparseable.accept_frame(start) == ProtocolError::NONE);
+    const std::vector<uint8_t> garbage{0x01, 0x02, 0x03};
+    assert(unparseable.accept_frame(garbage) == ProtocolError::STRAY_FRAME);
+    const auto &stray = unparseable.last_stray_frame();
+    assert(stray.valid);
+    assert(stray.parse_failed);
+  }
 
   // Sustained garbage still terminates the transaction rather than hanging.
   OmronTransaction stray_flood;

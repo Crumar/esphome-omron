@@ -134,6 +134,21 @@ class OmronTransaction {
   const std::vector<ReadBlock> &plan() const { return this->plan_; }
   const std::vector<ReceivedBlock> &received_blocks() const { return this->received_blocks_; }
 
+  // Diagnostic only, and overwritten by every stray frame: what the frame the
+  // transaction just dropped actually carried, against what the plan was
+  // waiting for. The log line otherwise says only that something was ignored,
+  // which does not separate a late duplicate from a cuff answering a different
+  // address than the one asked for.
+  struct StrayFrameInfo {
+    uint16_t expected_address{0};
+    uint16_t actual_address{0};
+    uint16_t actual_type{0};
+    bool parse_failed{false};
+    bool valid{false};
+  };
+  const StrayFrameInfo &last_stray_frame() const { return this->last_stray_; }
+  void clear_last_stray_frame() { this->last_stray_ = {}; }
+
  private:
   void append_blocks_(uint16_t address, uint16_t length, uint8_t block_size);
   bool build_plan_();
@@ -164,6 +179,7 @@ class OmronTransaction {
   OmronBindKey bind_key_{};
   size_t read_index_{0};
   uint8_t attempt_{0};
+  StrayFrameInfo last_stray_{};
   uint8_t stray_frames_{0};
   uint8_t end_status_{0};
   TransactionState state_{TransactionState::IDLE};
