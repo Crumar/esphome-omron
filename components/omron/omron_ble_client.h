@@ -99,6 +99,8 @@ class OmronBLEClient final : public esp32_ble_client::BLEClientBase,
   // Slots older than the newest, per person. Entities carry the newest; the
   // rest leave as events, because entity state cannot be backdated.
   void set_history_records(uint8_t count) { this->history_records_ = count; }
+  // Automation triggers fired once per harvested record; see omron_automation.h.
+  void add_measurement_trigger(OmronMeasurementTrigger *trigger) { this->measurement_triggers_.push_back(trigger); }
   // Seconds of drift tolerated before the clock is refreshed. Zero, the
   // default, refreshes every session.
   void set_clock_sync_threshold(int64_t seconds) {
@@ -279,8 +281,6 @@ class OmronBLEClient final : public esp32_ble_client::BLEClientBase,
   void history_emit(const HistoryEvent &pending) override;
   void history_save_watermark(uint8_t user_index, int64_t epoch) override;
 
-  // Automation triggers fired once per harvested record; see omron_automation.h.
-  void add_measurement_trigger(OmronMeasurementTrigger *trigger) { this->measurement_triggers_.push_back(trigger); }
   uint32_t history_pref_hash_(uint8_t user_index) const;
   void publish_selected_measurement_(uint8_t user_index, const HarvestedRecord &selected);
   void publish_standard_measurement_(std::span<const uint8_t> data);
