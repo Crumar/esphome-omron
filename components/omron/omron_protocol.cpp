@@ -50,13 +50,40 @@ ProtocolError parse_response(std::span<const uint8_t> frame, ResponseFrame &resp
   // eight-byte frame. Reading it as a length rejected every start response and
   // the session never got past the handshake.
   size_t payload_length = 0;
+  // A read of a region the cuff has never written is answered with the request
+  // echoed back and no payload at all: the frame is eight bytes, byte 5 still
+  // carries the requested block size, and the declared payload therefore
+  // overruns the frame. It is not corruption - byte 0 agrees with the frame's
+  // real size and the checksum is valid, both already established above - so it
+  // cannot be anything but a deliberate answer, and the only answer it can be
+  // is "nothing here".
+  //
+  // omblepy, which is where the working HEM-7361T readout lives, does exactly
+  // this: `if(expectedNumDataBytes > (len(combinedRawRx) - 8)): rxDataBytes =
+  // bytes(b'\xff') * expectedNumDataBytes`, and its record loop then drops
+  // every all-0xFF slot. parse_measurement_record already returns EMPTY_SLOT
+  // for a uniform 0x00 or 0xFF record, and the harvest already skips those, so
+  // the filler lands somewhere that understands it.
+  //
+  // Rejecting the frame instead is worse than losing one block: the transaction
+  // stays on the same read, re-sends it until the retry budget is gone, and the
+  // whole poll dies on "Memory-protocol reply timed out after all retries" -
+  // taking the written records either side of the empty one with it.
+  bool region_unwritten = false;
   if (raw_type == static_cast<uint16_t>(PacketType::READ_RESPONSE)) {
     payload_length = frame[5];
-    // The declared payload must fit, but it need not fill the frame. Both
-    // references slice the payload out by declared length and ignore whatever
-    // follows, so trailing padding is normal device behaviour.
-    if (READ_RESPONSE_OVERHEAD + payload_length > frame.size())
-      return ProtocolError::PAYLOAD_LENGTH_MISMATCH;
+    // The declared payload need not fill the frame: both references slice the
+    // payload out by declared length and ignore whatever follows, so trailing
+    // padding is normal device behaviour.
+    if (READ_RESPONSE_OVERHEAD + payload_length > frame.size()) {
+      // Narrower than omblepy, deliberately: it takes any overrun as the empty
+      // answer, which also swallows a frame that carries a partial payload.
+      // Only a frame with no payload whatsoever is the shape observed on the
+      // wire, so a partial one stays a length mismatch and keeps its check.
+      if (frame.size() != READ_RESPONSE_OVERHEAD)
+        return ProtocolError::PAYLOAD_LENGTH_MISMATCH;
+      region_unwritten = true;
+    }
   }
 
   response.type = static_cast<PacketType>(raw_type);
@@ -64,7 +91,11 @@ ProtocolError parse_response(std::span<const uint8_t> frame, ResponseFrame &resp
                                            frame[FRAME_ADDRESS_OFFSET + 1]);
   response.status = raw_type == static_cast<uint16_t>(PacketType::END_RESPONSE) ? frame[6] : 0;
   response.data.clear();
-  if (payload_length != 0) {
+  if (region_unwritten) {
+    // The length the caller asked for, so the block still satisfies the
+    // transaction's own length check and the plan advances past it.
+    response.data.assign(payload_length, 0xFF);
+  } else if (payload_length != 0) {
     const std::span<const uint8_t> payload = frame.subspan(RESPONSE_PAYLOAD_OFFSET, payload_length);
     response.data.assign(payload.begin(), payload.end());
   }

@@ -271,6 +271,41 @@ static void test_protocol_requests_and_parsing() {
       xor_bytes(std::span<const uint8_t>(bad_payload_length).first(bad_payload_length.size() - 1));
   assert(parse_response(bad_payload_length, response) == ProtocolError::PAYLOAD_LENGTH_MISMATCH);
 
+  // A read of a region the cuff has never written comes back as the request
+  // echoed with the response bit set: eight bytes, no payload, byte 5 still the
+  // requested block size. The frame is self-consistent - its length byte agrees
+  // with its real size and its checksum is valid - so it is an answer, not
+  // corruption, and the answer is "nothing here". Captured from an X7 Smart
+  // (HEM-7361T-ESL) refusing 0x38 bytes at 0x0588:
+  const std::vector<uint8_t> unwritten_region{0x08, 0x81, 0x00, 0x05, 0x88, 0x38, 0xE3, 0xDF};
+  assert(unwritten_region[0] == unwritten_region.size());
+  assert(xor_bytes(unwritten_region) == 0);
+  assert(parse_response(unwritten_region, response) == ProtocolError::NONE);
+  assert(response.type == PacketType::READ_RESPONSE);
+  assert(response.address == 0x0588);
+  // Filled to the length that was asked for, so the transaction's own length
+  // check still passes and the plan advances past the empty block instead of
+  // re-sending it until the poll dies.
+  assert(response.data.size() == 0x38);
+  assert(std::all_of(response.data.begin(), response.data.end(), [](uint8_t v) { return v == 0xFF; }));
+  // And 0xFF is the filler the record parser already reads as an empty slot,
+  // so nothing downstream mistakes it for a measurement.
+
+  // A transaction waiting on that block accepts it and moves on, which is the
+  // behaviour the poll depends on.
+  {
+    const std::array<uint8_t, 4> no_nonce{};
+    const auto start_reply = make_response(PacketType::START_RESPONSE);
+    OmronTransaction empty_block;
+    assert(empty_block.add_read_range(0x0588, 0x38, 0x38));
+    assert(empty_block.begin(TransactionUnlock::NONE, OmronBindKey{}, no_nonce));
+    assert(empty_block.accept_frame(start_reply) == ProtocolError::NONE);
+    assert(empty_block.accept_frame(unwritten_region) == ProtocolError::NONE);
+    assert(empty_block.received_blocks().size() == 1);
+    assert(empty_block.received_blocks()[0].address == 0x0588);
+    assert(empty_block.received_blocks()[0].data.size() == 0x38);
+  }
+
   const std::array<uint8_t, 4> nonce{0x01, 0x23, 0x45, 0x67};
   const auto token_request = make_token_request(nonce);
   assert(token_request[0] == 0x11);
