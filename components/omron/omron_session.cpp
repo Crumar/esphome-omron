@@ -77,7 +77,13 @@ void OmronSession::note_unexpected_reply_(const char *what) {
   if (!stray.valid) {
     OMRON_LOG_W(TAG, "[%s] Ignored: %s", address, what);
   } else if (stray.parse_failed) {
-    OMRON_LOG_W(TAG, "[%s] Ignored: %s (frame did not parse)", address, what);
+    // The assembler has already checked the declared length and the checksum,
+    // so a frame that reaches parse_response and fails it was rejected on its
+    // packet type or its declared payload length. Both are cuff-side answers
+    // this component does not model, and neither can be identified without the
+    // bytes.
+    OMRON_LOG_W(TAG, "[%s] Ignored: %s (%s): %s", address, what, protocol_error_to_string(stray.parse_error),
+                format_hex_pretty(this->last_dropped_frame_.data(), this->last_dropped_frame_.size()).c_str());
   } else {
     OMRON_LOG_W(TAG, "[%s] Ignored: %s (waiting on 0x%04X, frame carried 0x%04X, type 0x%04X)", address, what,
                 static_cast<unsigned>(stray.expected_address), static_cast<unsigned>(stray.actual_address),
@@ -533,6 +539,14 @@ void OmronSession::on_protocol_notification(uint8_t channel, std::span<const uin
   }
   const auto &frame = this->frame_assembler_.frame();
   const ProtocolError error = this->transaction_.accept_frame(frame);
+  // Copied before the reset below, and only for a frame that was refused: the
+  // bytes are the whole diagnosis when the refusal was a parse failure, and
+  // they are gone the moment the assembler is cleared.
+  if (error == ProtocolError::STRAY_FRAME) {
+    this->last_dropped_frame_.assign(frame.begin(), frame.end());
+  } else {
+    this->last_dropped_frame_.clear();
+  }
   this->frame_assembler_.reset();
   // Before the wire state is touched, because this frame answered nothing: the
   // transaction dropped it and stayed where it was, and the reply actually

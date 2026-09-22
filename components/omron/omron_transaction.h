@@ -144,6 +144,10 @@ class OmronTransaction {
     uint16_t actual_address{0};
     uint16_t actual_type{0};
     bool parse_failed{false};
+    // Which check in parse_response() rejected it. Assembly has already
+    // validated declared length and checksum by this point, so only an
+    // unrecognised packet type or an overrunning payload length can get here.
+    ProtocolError parse_error{ProtocolError::NONE};
     bool valid{false};
   };
   const StrayFrameInfo &last_stray_frame() const { return this->last_stray_; }

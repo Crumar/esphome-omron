@@ -277,6 +277,10 @@ class OmronSession {
 
   OmronTransaction transaction_{};
   OmronFrameAssembler frame_assembler_{};
+  // Diagnostic only: the bytes of the last frame the transaction refused, kept
+  // because the assembler is reset immediately afterwards and the log line is
+  // emitted further down the call chain.
+  std::vector<uint8_t> last_dropped_frame_{};
   OmronMemoryImage index_memory_{};
   OmronMemoryImage record_memory_{};
   std::vector<UserRecordPlan> record_plans_{};

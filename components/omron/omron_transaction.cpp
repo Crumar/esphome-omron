@@ -244,6 +244,7 @@ ProtocolError OmronTransaction::accept_frame(std::span<const uint8_t> frame) {
     // still in flight and skip the block it was waiting for.
     this->last_stray_ = {};
     this->last_stray_.parse_failed = true;
+    this->last_stray_.parse_error = parse_error;
     this->last_stray_.valid = true;
     if (++this->stray_frames_ <= MAX_STRAY_FRAMES)
       return ProtocolError::STRAY_FRAME;
@@ -271,7 +272,8 @@ ProtocolError OmronTransaction::accept_frame(std::span<const uint8_t> frame) {
         // stay in this state instead of failing the whole poll. Answered as
         // STRAY_FRAME rather than NONE so the caller cannot read "stayed put"
         // as "carry on" - it did, and re-sent the command still in flight.
-        this->last_stray_ = {expected.address, response.address, static_cast<uint16_t>(response.type), false, true};
+        this->last_stray_ = {expected.address,  response.address,     static_cast<uint16_t>(response.type),
+                             false,              ProtocolError::NONE,  true};
         if (++this->stray_frames_ <= MAX_STRAY_FRAMES)
           return ProtocolError::STRAY_FRAME;
         this->fail(ProtocolError::UNEXPECTED_COMMAND);
@@ -292,8 +294,12 @@ ProtocolError OmronTransaction::accept_frame(std::span<const uint8_t> frame) {
       // somewhere else entirely.
       if (response.type != PacketType::WRITE_RESPONSE || this->writes_.empty() ||
           response.address != this->writes_.front().address) {
-        this->last_stray_ = {this->writes_.empty() ? uint16_t{0} : this->writes_.front().address, response.address,
-                             static_cast<uint16_t>(response.type), false, true};
+        this->last_stray_ = {this->writes_.empty() ? uint16_t{0} : this->writes_.front().address,
+                             response.address,
+                             static_cast<uint16_t>(response.type),
+                             false,
+                             ProtocolError::NONE,
+                             true};
         if (++this->stray_frames_ <= MAX_STRAY_FRAMES)
           return ProtocolError::STRAY_FRAME;
         this->fail(ProtocolError::UNEXPECTED_COMMAND);

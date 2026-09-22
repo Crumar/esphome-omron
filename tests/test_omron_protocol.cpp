@@ -524,6 +524,25 @@ static void test_transaction_engine() {
     const auto &stray = unparseable.last_stray_frame();
     assert(stray.valid);
     assert(stray.parse_failed);
+    assert(stray.parse_error != ProtocolError::NONE);
+  }
+  // An assembled frame carrying a packet type this component does not model is
+  // the shape that survives the assembler's length and checksum checks and is
+  // then refused by parse_response. The log has to name it, because nothing
+  // else in the session distinguishes it from a late duplicate.
+  {
+    OmronTransaction unknown_type;
+    assert(unknown_type.add_read_range(0x0400, 2, 2));
+    assert(unknown_type.begin(TransactionUnlock::NONE, OmronBindKey{}, zero_nonce));
+    assert(unknown_type.accept_frame(start) == ProtocolError::NONE);
+    auto odd = make_response(PacketType::READ_RESPONSE, 0x0400, {1, 2});
+    odd[1] = 0x83;  // not one of the four response types
+    odd.back() ^= static_cast<uint8_t>(0x81 ^ 0x83);
+    assert(unknown_type.accept_frame(odd) == ProtocolError::STRAY_FRAME);
+    const auto &stray = unknown_type.last_stray_frame();
+    assert(stray.valid);
+    assert(stray.parse_failed);
+    assert(stray.parse_error == ProtocolError::UNEXPECTED_COMMAND);
   }
 
   // Sustained garbage still terminates the transaction rather than hanging.
