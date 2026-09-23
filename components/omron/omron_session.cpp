@@ -94,19 +94,14 @@ void OmronSession::note_unexpected_reply_(const char *what) {
 
 void OmronSession::finish(bool success) {
   // Only a session that finished cleanly may claim it collected a ring. A
-  // failed one leaves the previous cursors standing, so the next attempt reads
+  // failed one leaves the previous index standing, so the next attempt reads
   // the records again instead of skipping them on the strength of a session
   // that never got through them.
-  if (success) {
-    for (size_t user = 0; user < USER_SLOTS; user++) {
-      if (!this->has_staged_cursor_[user])
-        continue;
-      this->polled_cursor_[user] = this->staged_cursor_[user];
-      this->has_polled_cursor_[user] = true;
-    }
+  if (success && this->has_staged_index_) {
+    this->polled_index_ = this->staged_index_;
+    this->has_polled_index_ = true;
   }
-  for (size_t user = 0; user < USER_SLOTS; user++)
-    this->has_staged_cursor_[user] = false;
+  this->has_staged_index_ = false;
 }
 
 bool OmronSession::transfer_open() const {
@@ -623,23 +618,19 @@ bool OmronSession::build_record_reads_() {
   if (index_data.size() != layout.index_size || !build_record_plan(layout, index_data, this->record_plans_))
     return false;
 
-  // Remember where every ring stands before anything is dropped, so the cursor
-  // of a user whose frames we skip is still the cursor we compare against next
-  // time.
-  for (const auto &user_plan : this->record_plans_) {
-    if (user_plan.user < USER_SLOTS) {
-      this->staged_cursor_[user_plan.user] = user_plan.raw_cursor;
-      this->has_staged_cursor_[user_plan.user] = true;
-    }
-  }
+  // Remember the index as it stands before anything is dropped, so the next
+  // session compares against what this one saw whether or not it read a ring.
+  const bool index_unchanged = this->has_polled_index_ && this->polled_index_ == index_data;
+  this->staged_index_ = index_data;
+  this->has_staged_index_ = true;
 
-  // Drop the users whose ring has not moved since the last session that
-  // finished. Their entities keep the values they already hold, which is what
-  // those values were: the newest record in a ring that has not changed.
+  // Drop every ring when not one byte of the index has moved since the last
+  // session that finished. Their entities keep the values they already hold,
+  // which is what those values were: the newest record in a ring that has not
+  // changed. See polled_index_ for why the cursor alone does not decide this.
   const bool read_everything = this->config_.full_read_on_pairing && this->pairing_advertised_;
-  const size_t skipped = std::erase_if(this->record_plans_, [this, read_everything](const UserRecordPlan &plan) {
-    return !read_everything && plan.user < USER_SLOTS && this->has_polled_cursor_[plan.user] &&
-           this->polled_cursor_[plan.user] == plan.raw_cursor;
+  const size_t skipped = std::erase_if(this->record_plans_, [&](const UserRecordPlan &plan) {
+    return !read_everything && plan.user < USER_SLOTS && index_unchanged;
   });
   if (skipped != 0) {
     OMRON_LOG_D(TAG, "[%s] %u user ring(s) unchanged since the last session; not re-reading them",

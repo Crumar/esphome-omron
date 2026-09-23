@@ -2833,6 +2833,7 @@ int main() {
   groups += run_group(test_command_writer_edge_cases);
   groups += run_group(test_session_ignores_a_stray_frame_without_resending);
   groups += run_group(test_session_with_unmoved_cursors_reads_only_two_frames);
+  groups += run_group(test_session_reads_again_when_the_index_moves_but_the_cursor_does_not);
   groups += run_group(test_session_full_read_on_pairing_needs_both_the_option_and_the_flag);
   groups += run_group(test_session_registration_writes_reach_the_wire);
   groups += run_group(test_session_survives_the_reply_racing_the_write_ack);

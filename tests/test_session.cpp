@@ -501,6 +501,49 @@ void test_session_with_unmoved_cursors_reads_only_two_frames() {
   assert(cuff.read_frames() == 2);  // the previous *successful* session still stands
 }
 
+void test_session_reads_again_when_the_index_moves_but_the_cursor_does_not() {
+  const OmronProfile &mw3 = get_profile(OmronProfileId::HEM_7155T_MW3);
+  FakeCuff cuff;
+  load_captured_cuff(cuff, mw3);
+
+  OmronDiagnostics diagnostics{};
+  OmronSession session;
+  session.set_host(&cuff);
+  session.set_diagnostics(&diagnostics);
+  session.configure(captured_session_config(mw3, 3));
+
+  session.begin(true);
+  cuff.pump(session);
+  assert(cuff.failure == nullptr);
+  const size_t full = cuff.read_frames();
+  assert(full > 2);
+  session.finish(true);
+
+  // A measurement that leaves the cursor bytes alone and moves only the unread
+  // counter. An X7 Smart (HEM-7361T-ESL) does exactly this, captured as
+  //   00.40.02.00.01.00.00.80.E9.01... -> 00.40.02.00.02.00.00.80.EA.01...
+  // and a session keyed on the cursor read it as an unchanged ring, so the
+  // reading never left the node.
+  const uint16_t unread = static_cast<uint16_t>(mw3.settings_read_address + mw3.users[0].unread_counter_offset);
+  cuff.poke(unread, {0x02, 0x00});
+  cuff.sent.clear();
+  session.reset();
+  session.begin(true);
+  cuff.pump(session);
+  assert(cuff.failure == nullptr);
+  assert(cuff.read_frames() == full);
+  session.finish(true);
+
+  // And the one after that, with nothing measured in between, is back to two
+  // frames: the new index is what it now compares against.
+  cuff.sent.clear();
+  session.reset();
+  session.begin(true);
+  cuff.pump(session);
+  assert(cuff.failure == nullptr);
+  assert(cuff.read_frames() == 2);
+}
+
 void test_session_full_read_on_pairing_needs_both_the_option_and_the_flag() {
   const OmronProfile &mw3 = get_profile(OmronProfileId::HEM_7155T_MW3);
   FakeCuff cuff;

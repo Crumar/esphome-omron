@@ -309,19 +309,34 @@ class OmronSession {
   // must not follow them: it lands on the same bytes and undoes the marker.
   bool clock_write_queued_{false};
 
-  // Where each user's write cursor stood at the last successful session. A
-  // cursor that has not moved means that ring holds nothing new, so its record
-  // frames are not worth sending. Committed only when a session ends cleanly.
+  // The whole index region as it stood at the last successful session. An
+  // index that has not changed in any byte means no ring holds anything new, so
+  // their record frames are not worth sending. Committed only when a session
+  // ends cleanly.
+  //
+  // The whole region, not each user's write cursor, because the cursor alone is
+  // not enough on every cuff. An X7 Smart (HEM-7361T-ESL) was captured taking a
+  // measurement that moved its unread counter and its sequence number and left
+  // the cursor bytes exactly as they were:
+  //
+  //   before  00.40.02.00.01.00.00.80.E9.01.00.80.02.00.00.00
+  //   after   00.40.02.00.02.00.00.80.EA.01.00.80.02.00.00.00
+  //
+  // Keyed on the cursor, every session after the first one following a boot
+  // skipped that ring, and the reading never left the node. Comparing every
+  // byte can only skip less than the cursor did, never more: a moved cursor is
+  // a changed region. The price is that one user's measurement re-reads the
+  // other user's window as well, a few frames the watermark then discards.
   //
   // Deliberately not persisted, however much it looks like it should be: the
   // one moment it would be read back from NVS is the first session after a
   // boot, and that is the one session that must not skip. Entities come up
   // empty and this read is what fills them. Persisting it would also mean an
   // NVS write per measurement, to save the second and a half a full ring costs.
-  std::array<uint32_t, USER_SLOTS> polled_cursor_{};
-  std::array<bool, USER_SLOTS> has_polled_cursor_{};
-  std::array<uint32_t, USER_SLOTS> staged_cursor_{};
-  std::array<bool, USER_SLOTS> has_staged_cursor_{};
+  std::vector<uint8_t> polled_index_{};
+  bool has_polled_index_{false};
+  std::vector<uint8_t> staged_index_{};
+  bool has_staged_index_{false};
 };
 
 }  // namespace esphome::omron
